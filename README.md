@@ -16,7 +16,7 @@ need to install a few prerequisite softwares and packages. First install
 python 3. Then install the following packages for python packaging, prettytable,
 termcolor and z3-solver.
 
-Once you have installed these softwares in the vm run the following commands.
+Once you have installed these softwares in the VM, run the following commands.
 
 ```
 $ git clone https://github.com/bpfverif/agni-smt-verification.git
