@@ -25,7 +25,7 @@ $ cd agni-smt-verification/src
 
 $ make
 
-$ ./src/verifier_test <instruction> <register 1 value> <register 2 values>
+$ ./verifier_test <instruction> <register 1 value> <register 2 values>
 ```
 
 Right now,only ALU instructions are supported. \<instruction\> can be replaced
