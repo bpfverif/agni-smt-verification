@@ -12,7 +12,6 @@ import sys
 arguments: kernel version, operation, reg1, reg2
 """
 def main():
-    print(sys.argv)
     if len(sys.argv) != 5:
         print("usage python3 test_encoding.py <kernel_version> <op_type> \
                 <reg1> <reg2>")
@@ -26,8 +25,6 @@ def main():
     s = Optimize()
     smt_file = f"../bpf-encodings/{kernel_version}/BPF_{operation}.smt2"
     
-    insn_ver = "5.9"
-
     abstract_operator = parse_smt2_file(smt_file)
     s.add(abstract_operator)
 
@@ -49,7 +46,7 @@ def main():
     input_src_reg = bpf_register("src_input0")
     output_dst_reg = bpf_register("dst_output0")
     
-    json_off = 4 if version.parse(insn_ver) == version.parse("4.14") else 5
+    json_off = 4 if version.parse(kernel_version) == version.parse("4.14") else 5
     
     # update bv mapping handles no 32-bit valus for version less than 5.73c1
     input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
@@ -69,8 +66,8 @@ def main():
     else:
         s.add(input_src_reg.singleton(int(reg_2)))
     
-    if str(s.check()) == "sat": print("At least one abstract state was found\n")
-    else: print("No satisfactory abstract states were found\n")
+    if str(s.check()) == "sat": print("1 sat solution found")
+    else: print("0 no sat solution found")
         
     print("val    :", s.model()[output_dst_reg.var_off_value])
     print("mask   :", s.model()[output_dst_reg.var_off_mask])
@@ -89,8 +86,8 @@ def main():
     
     s.add(output_dst_reg.check_uniqueness(s))
     
-    if str(s.check()) == "sat": print("\nSolution was not unique")
-    else: print("\nSolution was unique")   
+    if str(s.check()) == "sat": print("0 not unique") 
+    else: print("1 unique") 
 
 if __name__ == "__main__":
     main()

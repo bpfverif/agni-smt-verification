@@ -354,20 +354,7 @@ int main(int argc, char **argv)
 
   close(fd);
 
-  printf("val    : %llu\n", trace_output_vals[0]);
-  printf("mask   : %llu\n", trace_output_vals[1]);
-  printf("s64_min: %llu\n", trace_output_vals[2]);
-  printf("s64_max: %llu\n", trace_output_vals[3]);
-  printf("u64_min: %llu\n", trace_output_vals[4]);
-  printf("u64_max: %llu\n", trace_output_vals[5]);
-  printf("s32_min: %llu\n", trace_output_vals[6]);
-  printf("s32_max: %llu\n", trace_output_vals[7]);
-  printf("u32_min: %llu\n", trace_output_vals[8]);
-  printf("u32_max: %llu\n", trace_output_vals[9]);
-
   /* get output from python, do comparison */
-
-  char *py_content = NULL;
 
   char *py_cmd = malloc(1);
   py_cmd[0] = 0;
@@ -386,16 +373,78 @@ int main(int argc, char **argv)
   
   int pyfd = fileno(popen(py_cmd,  "r"));
 
-
-
-  memset(buf, 0, BUFSIZE);
+  char *py_content = NULL;
   bytes = read(pyfd, buf, BUFSIZE);
-  printf("bytes read: %d\n", bytes);
-  printf("%s", buf);
-     
+  py_content = malloc(bytes+1);
+  py_content[bytes] = 0;
+  memcpy(py_content, buf, bytes);
+  memset(buf, 0, BUFSIZE);
+  
+  colon_count = 0;
+  i = 0;
+  int pc_size = bytes;
+  
+  if (py_content[0] - '0' == 0)
+  {
+    printf("smt solution not found\n");
+    return -1;
+    // TODO report error (no satisfying solution) 
+  }
+
+  unsigned long long py_output_vals[10];
+  while (colon_count < 10)
+  {
+    if (py_content[i] == ':')
+    {
+      py_output_vals[colon_count] = strtoull(py_content + i + 1, NULL, 10);
+
+      if (colon_count == 6 || colon_count == 7)
+      {
+        py_output_vals[colon_count] = py_output_vals[colon_count] & 
+          0x00000000ffffffff;
+      }
+
+      colon_count++;
+    }
+    i++;
+
+    if (i >= pc_size)
+    {
+      printf("Content not printed in trace");
+      return -1;
+    }
+  }
+  
+  while (py_content[i-1] != '\n') 
+  { 
+    i++; 
+  }
+  
+  if (py_content[i] - '0' == 0)
+  {
+    printf("smt solution not unique\n");
+    return -1;
+    // TODO report error (solution is not unique) 
+  }
+
+  close(fd);
+
+  for (i = 0; i < 10; i++)
+  {
+    if (py_output_vals[i] != trace_output_vals[i])
+    {
+      printf("verifier output not matching with smt output\n");
+      return -1;
+      //TODO report error (verifier and smt output do not match)
+    }
+  }
+
+  printf("PASSED TEST\n");
+
   /* free all allocated resourced */
 
   free(trace_content);
+  free(py_content);
 
   return 0;
 }
