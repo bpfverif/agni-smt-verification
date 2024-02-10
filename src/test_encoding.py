@@ -12,7 +12,7 @@ import sys
 arguments: kernel version, operation, reg1, reg2
 """
 def main():
-    print(sys.argv)   
+    print(sys.argv)
     if len(sys.argv) != 5:
         print("usage python3 test_encoding.py <kernel_version> <op_type> \
                 <reg1> <reg2>")

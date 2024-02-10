@@ -15,56 +15,56 @@
 #define TRACE_FILE "/sys/kernel/debug/tracing/trace"
 
 int regs[] = {
-	BPF_REG_0,
-	BPF_REG_1,
-	BPF_REG_2,
-	BPF_REG_3,
-	BPF_REG_4,
-	BPF_REG_5,
-	BPF_REG_6,
-	BPF_REG_7,
-	BPF_REG_8,
-	BPF_REG_9,
+  BPF_REG_0,
+  BPF_REG_1,
+  BPF_REG_2,
+  BPF_REG_3,
+  BPF_REG_4,
+  BPF_REG_5,
+  BPF_REG_6,
+  BPF_REG_7,
+  BPF_REG_8,
+  BPF_REG_9,
 };
 
 bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
 {
-	bpf_prog prog;
-	int bpf_insn_size = 8;
-	int num_insns = 0;
+  bpf_prog prog;
+  int bpf_insn_size = 8;
+  int num_insns = 0;
 
-	prog.insns = malloc(1);
+  prog.insns = malloc(1);
 
-	for (int i = 0; i < 3; i++) {
-		abstract_register_state curr_reg = state[i];
+  for (int i = 0; i < 3; i++) {
+    abstract_register_state curr_reg = state[i];
 
-		if (curr_reg.mask == FULLY_UNKNOWN)
-		{
-			num_insns += 2;
-			prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
-			prog.insns[num_insns-2] = BPF_MOV64_IMM(regs[i], 0);
-			prog.insns[num_insns-1] = BPF_ALU64_IMM(BPF_NEG, regs[i], 0);
-		}
+    if (curr_reg.mask == FULLY_UNKNOWN)
+    {
+      num_insns += 2;
+      prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
+      prog.insns[num_insns-2] = BPF_MOV64_IMM(regs[i], 0);
+      prog.insns[num_insns-1] = BPF_ALU64_IMM(BPF_NEG, regs[i], 0);
+    }
     else
-		{
-			num_insns += 2;
-			prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
-			struct bpf_insn ld_imm64_insn[2] = {BPF_LD_IMM64(regs[i], curr_reg.value)};
-			prog.insns[num_insns-2] = ld_imm64_insn[0];
-			prog.insns[num_insns-1] = ld_imm64_insn[1];
-		}
-	}
+    {
+      num_insns += 2;
+      prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
+      struct bpf_insn ld_imm64_insn[2] = {BPF_LD_IMM64(regs[i], curr_reg.value)};
+      prog.insns[num_insns-2] = ld_imm64_insn[0];
+      prog.insns[num_insns-1] = ld_imm64_insn[1];
+    }
+  }
 
-	num_insns += 3;
-	prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
-	// only regular instructions assumption (for now)
-	prog.insns[num_insns-3] = test_insn;
-	prog.insns[num_insns-2] = BPF_MOV64_IMM(BPF_REG_0, 0);
-	prog.insns[num_insns-1] = BPF_EXIT_INSN();
+  num_insns += 3;
+  prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
+  // only regular instructions assumption (for now)
+  prog.insns[num_insns-3] = test_insn;
+  prog.insns[num_insns-2] = BPF_MOV64_IMM(BPF_REG_0, 0);
+  prog.insns[num_insns-1] = BPF_EXIT_INSN();
 
-	prog.size = num_insns * bpf_insn_size;
-	
-	return prog;
+  prog.size = num_insns * bpf_insn_size;
+
+  return prog;
 }
 
 /*  TODO FIRST GO ROUND
@@ -218,7 +218,7 @@ int kmp_search(char* pat, char* txt)
       results_len++;
       results = realloc(results, results_len * sizeof(int));
       results[results_len-1] = i - j;
-        
+
       j = lps[j - 1];
     }
 
@@ -234,25 +234,25 @@ int kmp_search(char* pat, char* txt)
       }
     }
   }
-  
+
   int result = results[results_len-1];
   free(results);
-  
+
   return results_len == 0 ? -1 : result;
 }
 
 int load_prog(bpf_prog prog, int print_log)
 {
-	int prog_fd = bpf_prog_load(BPF_PROG_TYPE_SOCKET_FILTER, prog.insns, prog.size,
-                              "GPL", 0);
+  int prog_fd = bpf_prog_load(BPF_PROG_TYPE_SOCKET_FILTER, prog.insns, prog.size,
+      "GPL", 0);
   if (print_log)
   {
-	  printf("VERIFIER LOG:\n%s", bpf_log_buf);
+    printf("VERIFIER LOG:\n%s", bpf_log_buf);
   }
-	if (prog_fd < 0)
-	{
-		return prog_fd;
-	}
+  if (prog_fd < 0)
+  {
+    return prog_fd;
+  }
 }
 
 int main(int argc, char **argv)
@@ -265,46 +265,32 @@ int main(int argc, char **argv)
   }
 
   /* process command line arguments */
-  
+
   abstract_register_state reg_1;
   abstract_register_state reg_2;
 
   assign_reg(&reg_1, argv[2]);
   assign_reg(&reg_2, argv[3]);
 
-	abstract_register_state state[] = {
-		{.mask = SINGLETON, .value = 0},
+  abstract_register_state state[] = {
+    {.mask = SINGLETON, .value = 0},
     reg_1,
     reg_2
-	};
+  };
 
-	struct bpf_insn test_insn;
+  struct bpf_insn test_insn;
   assign_test_insn(&test_insn, argv[1]);
-    
-  int pid = fork();
-  int fds[2]; // write to fds[1], read from fds[0]
-  pipe(fds);
-
-  if (pid == 0)
-  {
-    // dup2(fds[1], 1);
-    char *pyargs[7] = {"python3", "test_encoding.py", "6.2", argv[1], argv[2], 
-                        argv[3], NULL};
-    execvp("python3", pyargs);
-  }
-
-  close(fds[1]);
-
+  
   /* generate and load bpf program */
-	
-	bpf_prog prog = gen_prog(state, test_insn);
+
+  bpf_prog prog = gen_prog(state, test_insn);
   if (load_prog(prog, 0) < 0)
   {
-	  printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
+    printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
   }
 
   /* BPF STATE */
-  
+
   int fd = open(TRACE_FILE, O_RDONLY);
   if (fd < 0)
   {
@@ -316,7 +302,7 @@ int main(int argc, char **argv)
   char *trace_content = NULL, buf[BUFSIZE];
 
   memset(buf, 0, BUFSIZE);
-  #define TAG_STRING "bpf_state: OUPUT"
+#define TAG_STRING "bpf_state: OUPUT"
 
   while ((bytes = read(fd, buf, BUFSIZE)) > 0)
   {
@@ -340,18 +326,19 @@ int main(int argc, char **argv)
   {
     tc_idx = tc_idx + strlen(TAG_STRING);
   }
-  
+
   int colon_count = 0, i = tc_idx;
-  unsigned long long output_vals[10];
+  unsigned long long trace_output_vals[10];
   while (colon_count < 10)
   {
     if (trace_content[i] == ':')
     {
-      output_vals[colon_count] = strtoull(trace_content + i + 1, NULL, 10);
-      
+      trace_output_vals[colon_count] = strtoull(trace_content + i + 1, NULL, 10);
+
       if (colon_count == 6 || colon_count == 7)
       {
-        output_vals[colon_count] = output_vals[colon_count] & 0x00000000ffffffff;
+        trace_output_vals[colon_count] = trace_output_vals[colon_count] & 
+          0x00000000ffffffff;
       }
 
       colon_count++;
@@ -366,32 +353,49 @@ int main(int argc, char **argv)
   }
 
   close(fd);
-  open(TRACE_FILE, O_RDONLY | O_WRONLY | O_TRUNC);
-  
-  printf("val    : %llu\n", output_vals[0]);
-  printf("mask   : %llu\n", output_vals[1]);
-  printf("s64_min: %llu\n", output_vals[2]);
-  printf("s64_max: %llu\n", output_vals[3]);
-  printf("u64_min: %llu\n", output_vals[4]);
-  printf("u64_max: %llu\n", output_vals[5]);
-  printf("s32_min: %llu\n", output_vals[6]);
-  printf("s32_max: %llu\n", output_vals[7]);
-  printf("u32_min: %llu\n", output_vals[8]);
-  printf("u32_max: %llu\n", output_vals[9]);
+
+  printf("val    : %llu\n", trace_output_vals[0]);
+  printf("mask   : %llu\n", trace_output_vals[1]);
+  printf("s64_min: %llu\n", trace_output_vals[2]);
+  printf("s64_max: %llu\n", trace_output_vals[3]);
+  printf("u64_min: %llu\n", trace_output_vals[4]);
+  printf("u64_max: %llu\n", trace_output_vals[5]);
+  printf("s32_min: %llu\n", trace_output_vals[6]);
+  printf("s32_max: %llu\n", trace_output_vals[7]);
+  printf("u32_min: %llu\n", trace_output_vals[8]);
+  printf("u32_max: %llu\n", trace_output_vals[9]);
 
   /* get output from python, do comparison */
 
-  /*
-  bytes = read(fds[0], buf, BUFSIZE);
-  printf("bytes read: %d\n", bytes);
-  memset(buf, 0, BUFSIZE);
-  printf("%s", buf);
-  */
-  waitpid(pid, NULL, 0);
+  char *py_content = NULL;
 
+  char *py_cmd = malloc(1);
+  py_cmd[0] = 0;
+  char *pyargs[7] = {"python3", "test_encoding.py", "6.2", argv[1], argv[2], 
+      argv[3], NULL};
+  int arg_idx;
+
+  for (int i = 0; pyargs[i] != NULL; i++)
+  {
+    int new_len = strlen(py_cmd) + strlen(pyargs[i]) + 2;
+    py_cmd = realloc(py_cmd, new_len);
+    strcat(py_cmd, pyargs[i]);
+    strcat(py_cmd, " ");
+  }
+  py_cmd[strlen(py_cmd)-1] = 0;
+  
+  int pyfd = fileno(popen(py_cmd,  "r"));
+
+
+
+  memset(buf, 0, BUFSIZE);
+  bytes = read(pyfd, buf, BUFSIZE);
+  printf("bytes read: %d\n", bytes);
+  printf("%s", buf);
+     
   /* free all allocated resourced */
-  
+
   free(trace_content);
-  
-	return 0;
+
+  return 0;
 }
