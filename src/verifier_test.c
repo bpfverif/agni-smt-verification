@@ -67,18 +67,29 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
     return prog;
 }
 
-/*  TODO FIRST GO ROUND
+/*  TODO 
+ *  
+ *  Check for Errors
+ *  - Read through code, identify points of failure
+ *  - Checks to make sure errors do not occur
  *
- *  Take the values for opcode, reg1, and reg2 as input from 
- *  the command line.
+ *  Error Reporting
+ *  - specified file or default if no log file provided
+ *  - refer to error content/format in notes.md
  *
- *  Run the SMT python stuff as a subprocess to which you can
- *  give some arguments.
+ *  Expand to test non ALU operations (JMP, SYNC, etc)
+ *  - not sure how to do
  *
- *  Generate and load BPF program. Wait until trace appears
- *  and parse.
+ *  Multithreaded testing  
+ *  - mutex for log fd
+ * 
+ *  Separate Functions into Different files
+ *  - String search functions into separate file
  *
- *  Compare results of SMT and BPF verifier. Output results.
+ *  Make output into /bin
+ *
+ *  Test to make sure error reports are happening when they should be
+ *  - can be no errors in this
  */
 
 void assign_reg(abstract_register_state *reg, char *val)
@@ -423,6 +434,23 @@ unsigned long long *get_py_values(char *insn_str, char *reg_1_str, char *reg_2_s
     return py_output_vals; 
 }
 
+void outputs_equal(unsigned long long verifier_vals, unsigned long long py_vals)
+{
+    if (verifer_vals == NULL || py_vals == NULL)
+    {
+        return;
+    }
+
+    for (int i = 0; i < 10; i++)
+    {
+        if (py_output_vals[i] != trace_output_vals[i])
+        {
+            // TODO report error
+            return;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 4)
@@ -433,21 +461,8 @@ int main(int argc, char **argv)
 
     unsigned long long *trace_output_vals = get_verifier_values(argv[1], argv[2], argv[3]);
     unsigned long long *py_output_vals = get_py_values(argv[1], argv[2], argv[3]);
-    /* get output from python, do comparison */
-
-    for (int i = 0; i < 10; i++)
-    {
-        if (py_output_vals[i] != trace_output_vals[i])
-        {
-            printf("verifier output not matching with smt output\n");
-            return -1;
-            //TODO report error (verifier and smt output do not match)
-        }
-    }
-
-    printf("PASSED TEST\n");
-
-    /* free all allocated resourced */
+    
+    outputs_equal(trace_output_vals, py_output_vals)
 
     free(trace_output_vals);
     free(py_output_vals);
