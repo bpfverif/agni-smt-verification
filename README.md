@@ -25,8 +25,11 @@ $ cd agni-smt-verification/src
 
 $ make
 
+$ ./activate_tracing.sh
+
 $ ./verifier_test <instruction> <register 1 value> <register 2 values>
 ```
+Note that activate_tracing.sh only needs to be ran once at the beginning of a session. 
 
 Right now,only ALU instructions are supported. \<instruction\> can be replaced
 with one of ADD, SUB, MUL, DIV, OR, AND, LSH, RSH, NEG, MOD, XOR, MOV, ARSH or
