@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <time.h>
 
 #include "libbpf.h"
 #include "verifier_test.h"
@@ -13,6 +14,8 @@
 
 #define BUFSIZE 4096
 #define TRACE_FILE "/sys/kernel/debug/tracing/trace"
+
+error_reporting_details err_info;
 
 int regs[] = {
     BPF_REG_0,
@@ -90,10 +93,13 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
  *
  *  Test to make sure error reports are happening when they should be
  *  - can be no errors in this
+ *
+ *  Register Value should start as abstract_register_state
  */
 
 void assign_reg(abstract_register_state *reg, char *val)
 {
+    memset(reg, 0, sizeof(abstract_register_state));
     if (strcmp(val, "unknown") == 0)
     {
         reg->mask = FULLY_UNKNOWN;
@@ -256,6 +262,7 @@ int load_prog(bpf_prog prog, int print_log)
 {
     int prog_fd = bpf_prog_load(BPF_PROG_TYPE_SOCKET_FILTER, prog.insns, prog.size,
             "GPL", 0);
+
     if (print_log)
     {
         printf("VERIFIER LOG:\n%s", bpf_log_buf);
@@ -264,9 +271,11 @@ int load_prog(bpf_prog prog, int print_log)
     {
         return prog_fd;
     }
+
+    return 0;
 }
 
-unsigned long long *get_verifier_values(char *insn_str, char *reg_1_str, char *reg_2_str)
+uint64_t *get_verifier_values(char *insn_str, char *reg_1_str, char *reg_2_str)
 {
     abstract_register_state reg_1;
     abstract_register_state reg_2;
@@ -298,7 +307,7 @@ unsigned long long *get_verifier_values(char *insn_str, char *reg_1_str, char *r
         return NULL;
     }
 
-    int buf_idx, bytes, tc_size = 0;
+    int bytes, tc_size = 0;
     char *trace_content = NULL, buf[BUFSIZE];
 
     memset(buf, 0, BUFSIZE);
@@ -328,7 +337,7 @@ unsigned long long *get_verifier_values(char *insn_str, char *reg_1_str, char *r
     }
 
     int colon_count = 0, i = tc_idx;
-    unsigned long long *trace_output_vals = malloc(sizeof(unsigned long long) * 10);
+    uint64_t *trace_output_vals = malloc(sizeof(uint64_t) * 10);
     while (colon_count < 10)
     {
         if (trace_content[i] == ':')
@@ -359,13 +368,12 @@ unsigned long long *get_verifier_values(char *insn_str, char *reg_1_str, char *r
 }
 
 
-unsigned long long *get_py_values(char *insn_str, char *reg_1_str, char *reg_2_str)
+uint64_t *get_py_values(char *insn_str, char *reg_1_str, char *reg_2_str)
 {
     char *py_cmd = malloc(1);
     py_cmd[0] = 0;
     char *pyargs[7] = {"python3", "test_encoding.py", "6.2", insn_str, reg_1_str, 
         reg_2_str, NULL};
-    int arg_idx;
 
     for (int i = 0; pyargs[i] != NULL; i++)
     {
@@ -395,7 +403,7 @@ unsigned long long *get_py_values(char *insn_str, char *reg_1_str, char *reg_2_s
         // TODO report error (no satisfying solution) 
     }
 
-    unsigned long long *py_output_vals = malloc(sizeof(unsigned long long) * 10);
+    uint64_t *py_output_vals = malloc(sizeof(uint64_t) * 10);
     while (colon_count < 10)
     {
         if (py_content[i] == ':')
@@ -434,16 +442,16 @@ unsigned long long *get_py_values(char *insn_str, char *reg_1_str, char *reg_2_s
     return py_output_vals; 
 }
 
-void outputs_equal(unsigned long long verifier_vals, unsigned long long py_vals)
+void outputs_equal(uint64_t *verifier_vals, uint64_t *py_vals)
 {
-    if (verifer_vals == NULL || py_vals == NULL)
+    if (verifier_vals == NULL || py_vals == NULL)
     {
         return;
     }
 
     for (int i = 0; i < 10; i++)
     {
-        if (py_output_vals[i] != trace_output_vals[i])
+        if (py_vals[i] != verifier_vals[i])
         {
             // TODO report error
             return;
@@ -451,21 +459,81 @@ void outputs_equal(unsigned long long verifier_vals, unsigned long long py_vals)
     }
 }
 
+uint64_t rand_uint64() 
+{
+    uint64_t val;
+    size_t count;
+    FILE *rand_source = fopen("/dev/urandom", "r");
+
+    do 
+    {
+        count = fread(&val, sizeof(val), 1, rand_source);
+    } 
+    while (count != 1);
+
+    return val;
+}
+
+char *uint64_to_string(uint64_t val)
+{
+    uint64_t x = val;
+    int len = 0;
+    for (;x > 0; x /= 10) len++;
+
+    char *val_str = malloc(len+1);
+    
+    sprintf(val_str, "%lu", val);
+    
+    return val_str;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 4)
     {
-        printf("usage: ./verifier_test <ALU ISNS> <reg 1 val> <reg 2 val>\n");
+        printf("usage: ./verifier_test <err_log_path> <iterations> <insn>\n");
         return EXIT_FAILURE;
     }
 
-    unsigned long long *trace_output_vals = get_verifier_values(argv[1], argv[2], argv[3]);
-    unsigned long long *py_output_vals = get_py_values(argv[1], argv[2], argv[3]);
-    
-    outputs_equal(trace_output_vals, py_output_vals)
+    // TODO verify arguments are valid
 
-    free(trace_output_vals);
-    free(py_output_vals);
+    /*
+     * at the beginning of each loop we can set up the error information
+     * globally. Then upon error that information is used with an error message
+     * to print an error to the log file.
+     */
+
+    memcpy(err_info.kernel_version, "6.2", strlen("6.2")+1);
+    memcpy(err_info.insn, argv[3], strlen(argv[3])+1);
+    
+    srand(time(NULL));
+    int iterations = atoi(argv[2]);
+
+    for (int i = 0; i < iterations; i++) 
+    {
+        uint64_t reg_1 = rand_uint64();
+        uint64_t reg_2 = rand_uint64();
+
+        char *reg_1_str = uint64_to_string(reg_1);
+        char *reg_2_str = uint64_to_string(reg_2);
+        
+        printf("instruction: %s kernel version:%s\n",
+                err_info.insn, err_info.kernel_version);
+        printf("reg_1: %lu reg_2: %lu\n", reg_1, reg_2);
+
+        uint64_t *trace_output_vals = get_verifier_values(argv[3], reg_1_str, reg_2_str);
+        uint64_t *py_output_vals = get_py_values(argv[3], reg_1_str, reg_2_str);
+    
+        outputs_equal(trace_output_vals, py_output_vals);
+    
+        free(trace_output_vals);
+        free(py_output_vals);
+        free(reg_1_str);
+        free(reg_2_str);
+    }
+
+    
+
 
     return 0;
 }

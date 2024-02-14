@@ -8,4 +8,3 @@ Erorr Content
   - no satisfying solution for SMT model
   - multiple satisfying solutions for SMT model
 
-
