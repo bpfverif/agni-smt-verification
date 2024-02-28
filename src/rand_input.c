@@ -53,8 +53,5 @@ int main(int argc, char **argv)
         insn = strtok_r(NULL, ",", &save_ptr);
     }
 
-    for (int i = 0; i < num_insns; i++)
-    {
-        printf("%s\n", insns[i]);
-    }
+    
 }
