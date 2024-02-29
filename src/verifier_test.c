@@ -470,7 +470,9 @@ uint64_t rand_uint64()
         count = fread(&val, sizeof(val), 1, rand_source);
     } 
     while (count != 1);
-
+    
+    fclose(rand_source);
+    
     return val;
 }
 
