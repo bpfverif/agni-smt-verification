@@ -24,23 +24,6 @@ typedef struct abstract_register_state
 	unsigned int u32_max;
 } abstract_register_state;
 
-// TODO change to program info
-
-typedef struct error_reporting_details {
-    char kernel_version[10];
-    char insn[10];
-
-    char src_input[10];
-    char dst_input[10];
-
-    abstract_register_state py_regs[10];
-    abstract_register_state verifier_regs[10];
-
-    char path[100];
-    
-    char message[500];
-} error_reporting_details;
-
 typedef struct bpf_prog 
 {
 	int size;
