@@ -11,7 +11,7 @@
 #include "verifier_test.h"
 #include "string.h"
 
-#define BUFSIZE 4096
+#define BUFSIZE 40
 #define TRACE_FILE "/sys/kernel/debug/tracing/trace"
 
 int regs[] = {
@@ -27,6 +27,46 @@ int regs[] = {
     BPF_REG_9,
 };
 
+char *read_line(int fd)
+{
+    char read_buffer[BUFSIZE];
+    memset(read_buffer, 0, BUFSIZE);
+
+    char *line = NULL;
+    
+    int bytes_read = 0;
+    int offset = lseek(fd, 0, SEEK_CUR);
+    int line_size = 0;
+
+    int nl = 0;
+
+    while (nl == 0 && (bytes_read = read(fd, read_buffer, BUFSIZE-1)) > 0)
+    {
+        for (int charidx = 0; charidx < bytes_read; charidx++)
+        {
+            if (read_buffer[charidx] == '\n')
+            {
+                lseek(fd, offset + charidx + 1, SEEK_SET);
+                bytes_read = charidx + 1;
+                nl = 1;
+                break;
+            }
+        }
+
+        line = realloc(line, sizeof(char) * (line_size + bytes_read));
+        memmove(line + line_size, read_buffer, bytes_read);
+        offset += bytes_read;
+        line_size += bytes_read;
+
+        memset(read_buffer, 0, BUFSIZE);
+    }
+
+    if (line_size == 0) return NULL;
+
+    line[line_size-1] = 0;
+    return line;
+}
+
 bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
 {
     bpf_prog prog;
@@ -37,7 +77,7 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
 
     for (int i = 0; i < 3; i++) {
         abstract_register_state curr_reg = state[i];
-if (curr_reg.mask == FULLY_UNKNOWN)
+        if (curr_reg.mask == FULLY_UNKNOWN)
         {
             num_insns += 2;
             prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
@@ -229,42 +269,70 @@ int load_prog(bpf_prog prog, int print_log)
 {
     int prog_fd = bpf_prog_load(BPF_PROG_TYPE_SOCKET_FILTER, prog.insns, prog.size,
             "GPL", 0);
+
     if (print_log)
     {
         printf("VERIFIER LOG:\n%s", bpf_log_buf);
     }
+
     if (prog_fd < 0)
     {
         return prog_fd;
     }
+
+    return 0;
 }
 
 char ***get_insns(int input_fd)
 {
-    char buf[BUFSIZE];
-    char *line = NULL;
-    int bytes, line_size;
-    
-    memset(buf, 0, BUFSIZE);
+    char **insn_lines = NULL;
+    int num_insns = 0;
 
-    while ((bytes = read(input_fd, buf, BUFSIZE)) > 0)
-    {   
-        int fragment_start = 0;
-        for (int i = 0; i < bytes; i++)
+    char *new_line = NULL;
+
+    while (1)
+    {
+        new_line = read_line(input_fd);
+        if (new_line == NULL) break;
+        
+        num_insns += 1;
+        insn_lines = realloc(insn_lines, num_insns * sizeof(char *));
+        insn_lines[num_insns-1] = new_line;
+    } 
+
+    char ***final_insn_list = malloc((num_insns+1) * sizeof(char **));
+    for (int i = 0; i < num_insns; i++)
+    {
+        // break up insn into peices by str_tok_r
+        char *save_ptr;
+        char *insn_fragment = strtok_r(insn_lines[i], " ", &save_ptr);
+        char **insn_list_entry = NULL;
+        int entry_len = 0;
+
+        while (insn_fragment != NULL)
         {
-            if (buf[i] != '\n') continue;
+            int insn_fragment_len = strlen(insn_fragment) + 1;
+            entry_len++;
+            insn_list_entry = realloc(insn_list_entry, entry_len * sizeof(char *));
+            insn_list_entry[entry_len-1] = malloc(insn_fragment_len);
+            strncpy(insn_list_entry[entry_len-1], insn_fragment, insn_fragment_len); 
 
-            line = realloc(line, line_size + i - fragment_start);
-            strncpy(line + line_size, buf + fragment_start, i - fragment_start);
-            line_size += i - fragment_start;
-            // chop up line and reset everything
-            
-            line_size = 0;
-            free(line);
-            fragment_start = i + 1; 
+            insn_fragment = strtok_r(NULL, " ", &save_ptr);
         }
+
+        insn_list_entry = realloc(insn_list_entry, entry_len + 1);
+        insn_list_entry[entry_len] = 0; // null terminated
+
+        // TODO validate insn i.e. making sure arguments fit op and op is valid
+
+        final_insn_list[i] = insn_list_entry;
     }
-    
+
+    final_insn_list[num_insns] = 0; // null termiante
+
+    // TODO do deallocations
+
+    return final_insn_list; 
 }
 
 /* Structure:
@@ -278,12 +346,12 @@ char ***get_insns(int input_fd)
  * 3. Update trace output to have easier to deal with structure.
  *    - Flatten it and remove labels so we can just use strtok_r easily.
  *    - give each input some unique numbering -- might help with threading as well
- *    - put that numbering into a random register
+ *    - put that numbering into some fixed register
  *    - print that registers value in trace to match it when reading trace
  */
+
 int main(int argc, char **argv)
 {
-
     if (argc != 2)
     {
         printf("usage: ./verifier_test <input_path>\n");
@@ -291,14 +359,27 @@ int main(int argc, char **argv)
     }
 
     /* process command line arguments */
-    
-    int input_fd = open(input_path, O_RDONLY);
+
+    int input_fd = open(argv[1], O_RDONLY);
     if (input_fd < 0)
     {
         fprintf(stderr, "Failed to open provided path");
         return 1;
     }
-    
+
+    char ***insn_strs = get_insns(input_fd); 
+
+    for (int i = 0; insn_strs[i] != 0; i++)
+    {
+        for (int j = 0; insn_strs[i][j] != 0; j++)
+        {
+            printf("%s ", insn_strs[i][j]);
+        }
+        printf("\n");
+    }
+
+
+    return 0;   
 
 
     abstract_register_state reg_1;
@@ -324,7 +405,7 @@ int main(int argc, char **argv)
         printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
     }
 
-    /* BPF STATE */
+    /* READ TRACE */
 
     int fd = open(TRACE_FILE, O_RDONLY);
     if (fd < 0)
@@ -333,77 +414,6 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    int buf_idx, bytes, tc_size = 0;
-    char *trace_content = NULL, buf[BUFSIZE];
-
-    memset(buf, 0, BUFSIZE);
-#define TAG_STRING "bpf_state: OUPUT"
-
-    while ((bytes = read(fd, buf, BUFSIZE)) > 0)
-    {
-        tc_size += bytes;
-        trace_content = realloc(trace_content, tc_size);
-        memcpy(trace_content + tc_size - bytes, buf, bytes);
-    }
-
-    if (bytes < 0)
-    {
-        printf("Read of trace buffer failed.\n");
-        free(trace_content);
-        return EXIT_FAILURE; 
-    }
-
-    trace_content = realloc(trace_content, tc_size + 1);
-    trace_content[tc_size] = 0;
-
-    int tc_idx = kmp_search(TAG_STRING, trace_content);
-    if (tc_idx > -1) 
-    {
-        tc_idx = tc_idx + strlen(TAG_STRING);
-    }
-
-    int colon_count = 0, i = tc_idx;
-    unsigned long long output_vals[10];
-    while (colon_count < 10)
-    {
-        if (trace_content[i] == ':')
-        {
-            output_vals[colon_count] = strtoull(trace_content + i + 1, NULL, 10);
-
-            if (colon_count == 6 || colon_count == 7)
-            {
-                output_vals[colon_count] =
-                    output_vals[colon_count] & 0x00000000ffffffff;
-            }
-
-            colon_count++;
-        }
-        i++;
-
-        if (i >= tc_size)
-        {
-            printf("Content not printed in trace");
-            return -1;
-        }
-    }
-
-    close(fd);
-    open(TRACE_FILE, O_RDONLY | O_WRONLY | O_TRUNC);
-
-    printf("val    : %llu\n", output_vals[0]);
-    printf("mask   : %llu\n", output_vals[1]);
-    printf("s64_min: %llu\n", output_vals[2]);
-    printf("s64_max: %llu\n", output_vals[3]);
-    printf("u64_min: %llu\n", output_vals[4]);
-    printf("u64_max: %llu\n", output_vals[5]);
-    printf("s32_min: %llu\n", output_vals[6]);
-    printf("s32_max: %llu\n", output_vals[7]);
-    printf("u32_min: %llu\n", output_vals[8]);
-    printf("u32_max: %llu\n", output_vals[9]);
-
-    // free stuff
-    
-    free(trace_content);
-
     return 0;
+
 }
