@@ -11,6 +11,7 @@
 #include "verifier_test.h"
 #include "string.h"
 
+#define ITERS 15
 #define BUFSIZE 40
 #define TRACE_FILE "/sys/kernel/debug/tracing/trace"
 
@@ -67,7 +68,7 @@ char *read_line(int fd)
     return line;
 }
 
-bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn, int prog_id)
+bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
 {
     bpf_prog prog;
     int bpf_insn_size = 8;
@@ -77,7 +78,7 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn, int
 
 
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         abstract_register_state curr_reg = state[i];
         if (curr_reg.mask == FULLY_UNKNOWN)
         {
@@ -95,12 +96,6 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn, int
             prog.insns[num_insns-1] = ld_imm64_insn[1];
         }
     }
-
-    num_insns += 2;
-    prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
-    struct bpf_insn ld_imm64_insn[2] = {BPF_LD_IMM64(regs[3], prog_id)};
-    prog.insns[num_insns-2] = ld_imm64_insn[0];
-    prog.insns[num_insns-1] = ld_imm64_insn[1];
 
     num_insns += 3;
     prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
@@ -343,6 +338,32 @@ char ***get_insns(int input_fd)
     return final_insn_list; 
 }
 
+void get_outputs(int trace_fd, int num_outputs)
+{
+    char **outputs = NULL;
+    int outputs_consumed = 0;
+
+    char *new_output = NULL;
+
+    while (outputs_consumed < 12 + num_outputs) 
+    {
+        if (outputs_consumed < 12)
+        {
+            read_line(trace_fd);
+            outputs_consumed += 1;
+            continue;
+        }
+
+        new_output = read_line(trace_fd);
+        
+        outputs_consumed += 1;
+        outputs = realloc(outputs, outputs_consumed * sizeof(char *));
+        outputs[outputs_consumed-1] = new_output;
+
+        printf("%s\n", outputs[outputs_consumed-1]);
+    }
+}
+
 /* Structure:
  * 1. Get all the instructions from input file. 
  * 2. For each input, get output and print to real_verifier_output.
@@ -376,59 +397,58 @@ int main(int argc, char **argv)
     }
 
     char ***insn_strs = get_insns(input_fd); 
+    close(input_fd);
 
-    for (int i = 0; insn_strs[i] != 0; i++)
+    int iters = ITERS;
+    int k = 0;
+    
+    /* run some number of test programs */
+    while (insn_strs[k] != 0)
     {
-        for (int j = 0; insn_strs[i][j] != 0; j++)
+        int i;
+        for (i = k; insn_strs[i] != 0 && i < k + iters; i++)
         {
-            printf("%s ", insn_strs[i][j]);
+            abstract_register_state reg_1;
+            abstract_register_state reg_2;
+
+            assign_reg(&reg_1, insn_strs[i][1]);
+            assign_reg(&reg_2, insn_strs[i][2]);
+
+            abstract_register_state state[] = {
+                {.mask = SINGLETON, .value = 0},
+                reg_1,
+                reg_2,
+                {.mask = SINGLETON, .value = i}           
+            };
+
+            struct bpf_insn test_insn;
+            assign_test_insn(&test_insn, insn_strs[i][0]);
+
+            bpf_prog prog = gen_prog(state, test_insn);
+            if (load_prog(prog, 0) < 0)
+            {
+                printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
+            }
+        }    
+
+        iters = i - k;
+
+        /* READ TRACE */
+
+        int trace_fd = open(TRACE_FILE, O_RDWR);
+        if (trace_fd < 0)
+        {
+            printf("Not able to open trace buffer.\n");
+            return EXIT_FAILURE;
         }
-        printf("\n");
+        
+        get_outputs(trace_fd, iters);
+        write(trace_fd, "hey", 3);
+        close(trace_fd);
+        fclose(fopen(TRACE_FILE, "w"));
+
+        k += iters;      
     }
-
-
-    return 0;   
-
-
-    abstract_register_state reg_1;
-    abstract_register_state reg_2;
-
-    assign_reg(&reg_1, argv[2]);
-    assign_reg(&reg_2, argv[3]);
-
-    abstract_register_state state[] = {
-        {.mask = SINGLETON, .value = 0},
-        reg_1,
-        reg_2
-    };
-
-    struct bpf_insn test_insn;
-    assign_test_insn(&test_insn, argv[1]);
-
-    /* generate and load bpf program */
-    
-# define iters 5000
-
-    for (
-       
-
-
-    bpf_prog prog = gen_prog(state, test_insn);
-    if (load_prog(prog, 0) < 0)
-    {
-        printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
-    }
-
-    /* READ TRACE */
-
-    int fd = open(TRACE_FILE, O_RDONLY);
-    if (fd < 0)
-    {
-        printf("Not able to open trace buffer.\n");
-        return EXIT_FAILURE;
-    }
-
-    
 
     return 0;
 
