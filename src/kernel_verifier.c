@@ -7,6 +7,9 @@
 #include <errno.h>
 #include <sys/wait.h>
 
+#include <dirent.h>
+#include <sys/resource.h>
+
 #include "libbpf.h"
 #include "verifier_test.h"
 #include "string.h"
@@ -75,8 +78,6 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
     int num_insns = 0;
 
     prog.insns = malloc(1);
-
-
 
     for (int i = 0; i < 4; i++) {
         abstract_register_state curr_reg = state[i];
@@ -187,86 +188,6 @@ void assign_test_insn(struct bpf_insn *insn, char *operation)
     }
 }
 
-void compute_lps_array(char* pat, int M, int* lps)
-{
-    int len = 0;
-
-    lps[0] = 0; 
-
-    int i = 1;
-    while (i < M) 
-    {
-        if (pat[i] == pat[len]) 
-        {
-            len++;
-            lps[i] = len;
-            i++;
-        }
-        else 
-        {
-            if (len != 0) 
-            {
-                len = lps[len - 1];
-            }
-            else 
-            {
-                lps[i] = 0;
-                i++;
-            }
-        }
-    }
-}
-
-
-int kmp_search(char* pat, char* txt)
-{
-    int M = strlen(pat);
-    int N = strlen(txt);
-
-    int lps[M];
-
-    int *results = NULL;
-    int results_len = 0;
-
-    compute_lps_array(pat, M, lps);
-
-    int i = 0; 
-    int j = 0; 
-    while ((N - i) >= (M - j)) 
-    {
-        if (pat[j] == txt[i]) 
-        {
-            j++;
-            i++;
-        }
-
-        if (j == M) 
-        {
-            results_len++;
-            results = realloc(results, results_len * sizeof(int));
-            results[results_len-1] = i - j;
-
-            j = lps[j - 1];
-        }
-
-        else if (i < N && pat[j] != txt[i]) 
-        {
-            if (j != 0)
-            {
-                j = lps[j - 1];
-            }
-            else
-            {
-                i = i + 1;
-            }
-        }
-    }
-
-    int result = results[results_len-1];
-    free(results);
-
-    return results_len == 0 ? -1 : result;
-}
 
 int load_prog(bpf_prog prog, int print_log)
 {
@@ -426,6 +347,23 @@ void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
  *    - print that registers value in trace to match it when reading trace
  */
 
+int get_num_fds()
+{
+    int fd_count;
+    char buf[64];
+    struct dirent *dp;
+
+    snprintf(buf, 64, "/proc/%i/fd/", getpid());
+
+    fd_count = 0;
+    DIR *dir = opendir(buf);
+    while ((dp = readdir(dir)) != NULL) {
+        fd_count++;
+    }
+    closedir(dir);
+    return fd_count;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2)
@@ -445,11 +383,11 @@ int main(int argc, char **argv)
 
     char ***insn_strs = get_insns(input_fd); 
     close(input_fd);
-
-    int iters = ITERS;
+int iters = ITERS;
     int k = 0;
     
     /* run some number of test programs */
+    fclose(fopen(TRACE_FILE, "w"));
     while (insn_strs[k] != 0)
     {
         int i;
@@ -472,11 +410,16 @@ int main(int argc, char **argv)
             assign_test_insn(&test_insn, insn_strs[i][0]);
 
             bpf_prog prog = gen_prog(state, test_insn);
+            /*
             if (load_prog(prog, 0) < 0)
             {
                 printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
+                return EXIT_FAILURE;
             }
+            */
         }    
+
+        printf("open file descriptors: %d\n", get_num_fds());
 
         iters = i - k;
 
@@ -490,7 +433,7 @@ int main(int argc, char **argv)
         }
         
         print_outputs(trace_fd, iters, k);
-        close(trace_fd);
+        close(trace_fd); 
         fclose(fopen(TRACE_FILE, "w"));
 
         k += iters;      
