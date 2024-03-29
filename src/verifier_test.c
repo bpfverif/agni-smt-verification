@@ -15,8 +15,6 @@
 #define BUFSIZE 4096
 #define TRACE_FILE "/sys/kernel/debug/tracing/trace"
 
-error_reporting_details err_info;
-
 int regs[] = {
     BPF_REG_0,
     BPF_REG_1,
@@ -39,6 +37,7 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
     prog.insns = malloc(1);
 
     for (int i = 0; i < 3; i++) {
+        
         abstract_register_state curr_reg = state[i];
 
         if (curr_reg.mask == FULLY_UNKNOWN)
@@ -505,8 +504,6 @@ int main(int argc, char **argv)
      * to print an error to the log file.
      */
 
-    memcpy(err_info.kernel_version, "6.2", strlen("6.2")+1);
-    memcpy(err_info.insn, argv[3], strlen(argv[3])+1);
     
     srand(time(NULL));
     int iterations = atoi(argv[2]);
@@ -519,8 +516,6 @@ int main(int argc, char **argv)
         char *reg_1_str = uint64_to_string(reg_1);
         char *reg_2_str = uint64_to_string(reg_2);
         
-        printf("instruction: %s kernel version:%s\n",
-                err_info.insn, err_info.kernel_version);
         printf("reg_1: %lu reg_2: %lu\n", reg_1, reg_2);
 
         uint64_t *trace_output_vals = get_verifier_values(argv[3], reg_1_str, reg_2_str);

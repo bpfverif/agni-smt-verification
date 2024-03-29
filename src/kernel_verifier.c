@@ -67,13 +67,15 @@ char *read_line(int fd)
     return line;
 }
 
-bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
+bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn, int prog_id)
 {
     bpf_prog prog;
     int bpf_insn_size = 8;
     int num_insns = 0;
 
     prog.insns = malloc(1);
+
+
 
     for (int i = 0; i < 3; i++) {
         abstract_register_state curr_reg = state[i];
@@ -93,6 +95,12 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
             prog.insns[num_insns-1] = ld_imm64_insn[1];
         }
     }
+
+    num_insns += 2;
+    prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
+    struct bpf_insn ld_imm64_insn[2] = {BPF_LD_IMM64(regs[3], prog_id)};
+    prog.insns[num_insns-2] = ld_imm64_insn[0];
+    prog.insns[num_insns-1] = ld_imm64_insn[1];
 
     num_insns += 3;
     prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
@@ -398,6 +406,12 @@ int main(int argc, char **argv)
     assign_test_insn(&test_insn, argv[1]);
 
     /* generate and load bpf program */
+    
+# define iters 5000
+
+    for (
+       
+
 
     bpf_prog prog = gen_prog(state, test_insn);
     if (load_prog(prog, 0) < 0)
@@ -413,6 +427,8 @@ int main(int argc, char **argv)
         printf("Not able to open trace buffer.\n");
         return EXIT_FAILURE;
     }
+
+    
 
     return 0;
 
