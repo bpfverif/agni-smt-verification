@@ -6,13 +6,12 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <string.h>
 
 #include <dirent.h>
 #include <sys/resource.h>
 
-#include "libbpf.h"
-#include "verifier_test.h"
-#include "string.h"
+#include "kernel_verifier.h"
 
 #define ITERS 15
 #define BUFSIZE 40
@@ -204,6 +203,8 @@ int load_prog(bpf_prog prog, int print_log)
         return prog_fd;
     }
 
+    close(prog_fd);
+
     return 0;
 }
 
@@ -296,7 +297,7 @@ void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
         int skip_garbage = 0;
         while (reg_state_frag != NULL)
         {
-            // 6 garbage tokens at beginning of each trace
+            // 5 garbage tokens at beginning of each trace
             if (skip_garbage < 5)
             {
                 reg_state_frag = strtok_r(NULL, " ", &save_ptr);
@@ -347,23 +348,6 @@ void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
  *    - print that registers value in trace to match it when reading trace
  */
 
-int get_num_fds()
-{
-    int fd_count;
-    char buf[64];
-    struct dirent *dp;
-
-    snprintf(buf, 64, "/proc/%i/fd/", getpid());
-
-    fd_count = 0;
-    DIR *dir = opendir(buf);
-    while ((dp = readdir(dir)) != NULL) {
-        fd_count++;
-    }
-    closedir(dir);
-    return fd_count;
-}
-
 int main(int argc, char **argv)
 {
     if (argc != 2)
@@ -410,16 +394,12 @@ int iters = ITERS;
             assign_test_insn(&test_insn, insn_strs[i][0]);
 
             bpf_prog prog = gen_prog(state, test_insn);
-            /*
             if (load_prog(prog, 0) < 0)
             {
                 printf("PROGRAM FAILED VERIFICATION: %s\n", strerror(errno));
                 return EXIT_FAILURE;
             }
-            */
         }    
-
-        printf("open file descriptors: %d\n", get_num_fds());
 
         iters = i - k;
 

@@ -1,7 +1,7 @@
 #ifndef _KERNEL_VERIFIER_H
 #define _KERNEL_VERIFIER_H
 
-#include <libbpf.h>
+#include "libbpf.h"
 
 #define SINGLETON 0x0
 #define FULLY_UNKNOWN 0xffffffffffffffff
