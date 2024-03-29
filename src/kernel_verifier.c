@@ -306,7 +306,7 @@ char ***get_insns(int input_fd)
     char ***final_insn_list = malloc((num_insns+1) * sizeof(char **));
     for (int i = 0; i < num_insns; i++)
     {
-        // break up insn into peices by str_tok_r
+        // break up insn into peices by strtok_r
         char *save_ptr;
         char *insn_fragment = strtok_r(insn_lines[i], " ", &save_ptr);
         char **insn_list_entry = NULL;
@@ -338,13 +338,13 @@ char ***get_insns(int input_fd)
     return final_insn_list; 
 }
 
-void get_outputs(int trace_fd, int num_outputs)
+void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
 {
     char **outputs = NULL;
     int outputs_consumed = 0;
 
     char *new_output = NULL;
-
+    // 12 lines of garbage at beginning of trace
     while (outputs_consumed < 12 + num_outputs) 
     {
         if (outputs_consumed < 12)
@@ -357,10 +357,57 @@ void get_outputs(int trace_fd, int num_outputs)
         new_output = read_line(trace_fd);
         
         outputs_consumed += 1;
-        outputs = realloc(outputs, outputs_consumed * sizeof(char *));
-        outputs[outputs_consumed-1] = new_output;
+        outputs = realloc(outputs, (outputs_consumed-12) * sizeof(char *));
+        outputs[outputs_consumed-13] = new_output;
+    }
 
-        printf("%s\n", outputs[outputs_consumed-1]);
+    char ***reg_states = NULL;
+    int order[num_outputs];
+    
+    for (int i = 0; i < num_outputs; i++)
+    {
+        // Each one of these will be a list of the entire output broken up by spaces
+        char *save_ptr;
+        char *reg_state_frag = strtok_r(outputs[i], " ", &save_ptr);
+        char **reg_state_frags = NULL;
+        int reg_state_len = 0;
+        
+        int skip_garbage = 0;
+        while (reg_state_frag != NULL)
+        {
+            // 6 garbage tokens at beginning of each trace
+            if (skip_garbage < 5)
+            {
+                reg_state_frag = strtok_r(NULL, " ", &save_ptr);
+                skip_garbage++;
+                continue;
+            }
+
+            int reg_state_frag_len = strlen(reg_state_frag) + 1; // +1 for null term
+            reg_state_len++;
+            reg_state_frags = realloc(reg_state_frags, reg_state_len * sizeof(char *));
+            reg_state_frags[reg_state_len-1] = malloc(reg_state_frag_len);
+            strncpy(reg_state_frags[reg_state_len-1], reg_state_frag, reg_state_frag_len); 
+
+            reg_state_frag = strtok_r(NULL, " ", &save_ptr);
+        }
+
+        reg_states = realloc(reg_states, sizeof(char **) * (i+1));
+        reg_states[i] = reg_state_frags;
+
+        int prog_id = atoi(reg_states[i][30]);
+        
+        order[prog_id - min_prog_id] = i;
+    }
+
+    for (int i = 0; i < num_outputs; i++)
+    {
+        char **output_frags = reg_states[order[i]];
+        for (int j = 10; j < 20; j++)
+        {
+            printf("%s ", output_frags[j]);
+        }
+        printf("\n");
     }
 }
 
@@ -392,7 +439,7 @@ int main(int argc, char **argv)
     int input_fd = open(argv[1], O_RDONLY);
     if (input_fd < 0)
     {
-        fprintf(stderr, "Failed to open provided path");
+        fprintf(stderr, "Failed to open provided path\n");
         return 1;
     }
 
@@ -435,15 +482,14 @@ int main(int argc, char **argv)
 
         /* READ TRACE */
 
-        int trace_fd = open(TRACE_FILE, O_RDWR);
+        int trace_fd = open(TRACE_FILE, O_RDONLY);
         if (trace_fd < 0)
         {
             printf("Not able to open trace buffer.\n");
             return EXIT_FAILURE;
         }
         
-        get_outputs(trace_fd, iters);
-        write(trace_fd, "hey", 3);
+        print_outputs(trace_fd, iters, k);
         close(trace_fd);
         fclose(fopen(TRACE_FILE, "w"));
 
@@ -451,5 +497,4 @@ int main(int argc, char **argv)
     }
 
     return 0;
-
 }
