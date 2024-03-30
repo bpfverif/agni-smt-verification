@@ -48,18 +48,14 @@ def get_smt_output(insn, reg_1, reg_2):
 
     print(s.model()[output_dst_reg.var_off_value],
             s.model()[output_dst_reg.var_off_mask],
-            twos_comp(s.model()[output_dst_reg.smin_value].as_long(), 64),
-            twos_comp(s.model()[output_dst_reg.smax_value].as_long(), 64),
+            s.model()[output_dst_reg.smin_value],
+            s.model()[output_dst_reg.smax_value],
             s.model()[output_dst_reg.umin_value],
             s.model()[output_dst_reg.umax_value],
-            twos_comp(s.model()[output_dst_reg.s32_min_value].as_long(), 32),
-            twos_comp(s.model()[output_dst_reg.s32_max_value].as_long(), 32),
+            s.model()[output_dst_reg.s32_min_value],
+            s.model()[output_dst_reg.s32_max_value],
             s.model()[output_dst_reg.u32_min_value],
             s.model()[output_dst_reg.u32_max_value])
-
-
-# 3292695480587355191 0 3292695480587355191 3292695480587355191 3292695480587355191 3292695480
-
 
 def main():
     if len(sys.argv) != 3:

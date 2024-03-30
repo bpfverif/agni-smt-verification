@@ -119,7 +119,7 @@ void assign_reg(abstract_register_state *reg, char *val)
     {
         // TODO error checking on stroll
         reg->mask = SINGLETON;
-        reg->value = strtoll(val, NULL, 10);
+        reg->value = strtoull(val, NULL, 10);
     }
 }
 
@@ -223,7 +223,7 @@ char ***get_insns(int input_fd)
         num_insns += 1;
         insn_lines = realloc(insn_lines, num_insns * sizeof(char *));
         insn_lines[num_insns-1] = new_line;
-    } 
+    }
 
     char ***final_insn_list = malloc((num_insns+1) * sizeof(char **));
     for (int i = 0; i < num_insns; i++)
@@ -367,7 +367,7 @@ int main(int argc, char **argv)
 
     char ***insn_strs = get_insns(input_fd); 
     close(input_fd);
-int iters = ITERS;
+    int iters = ITERS;
     int k = 0;
     
     /* run some number of test programs */

@@ -106,6 +106,13 @@ int main(int argc, char **argv)
             
             char *val_str_1 = uint64_to_string(rand_uint64());
             char *val_str_2 = uint64_to_string(rand_uint64());
+            
+            // TODO Not sure how unknowns should be distribued
+            int r1 = rand() % 50;
+            int r2 = rand() % 50;
+
+            val_str_1 = r1 == 0 ? "unknown" : val_str_1;
+            val_str_2 = r2 == 0 ? "unknown" : val_str_2;
 
             size_t input_len = 
                 strlen(val_str_1) + strlen(val_str_2) + strlen(insns[i]) + 4;
@@ -114,9 +121,9 @@ int main(int argc, char **argv)
             snprintf(input, input_len, "%s %s %s\n", insns[i], val_str_1, val_str_2);
 
             safe_write(fd, input);
-
-            free(val_str_1);
-            free(val_str_2);
+            
+            if (r1 != 0) free(val_str_1);
+            if (r2 != 0)free(val_str_2);
             free(input);
         }
     }
