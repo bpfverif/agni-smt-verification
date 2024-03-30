@@ -2,6 +2,7 @@ from z3 import *
 import json
 from lib_reg_bounds_tracking import *
 from packaging import version
+import copy
 import sys
 
 """
@@ -11,50 +12,25 @@ import sys
 
 arguments: kernel version, operation, reg1, reg2
 """
-def main():
-    if len(sys.argv) != 5:
-        print("usage python3 test_encoding.py <kernel_version> <op_type> \
-                <reg1> <reg2>")
-        return 1
 
-    kernel_version = sys.argv[1]
-    operation = sys.argv[2]
-    reg_1 = sys.argv[3]
-    reg_2 = sys.argv[4]
+optimizers = {}
+
+def twos_comp(val, bits):
+    if (val & (1 << (bits - 1))) != 0: 
+        val = val - (1 << bits)
+    return val
+
+
+def get_smt_output(insn, reg_1, reg_2):
+    original_s, input_dst_reg, input_src_reg, output_dst_reg = optimizers.get(insn, None)
+
+    if original_s == None:
+        print("insn not recognized")
+        os.exit(1)
 
     s = Optimize()
-    smt_file = f"../bpf-encodings/{kernel_version}/BPF_{operation}.smt2"
-    
-    abstract_operator = parse_smt2_file(smt_file)
-    s.add(abstract_operator)
 
-    in_json_bpf_enc_mapping = []
-    out_json_bpf_enc_mapping = []
-    with open(smt_file, "r") as file:
-        lines = file.readlines()
-        in_json_bpf_enc_mapping = lines[-2].strip()
-        in_json_bpf_enc_mapping = in_json_bpf_enc_mapping[1:]
-        in_json_bpf_enc_mapping = json.loads(in_json_bpf_enc_mapping)
-
-        out_json_bpf_enc_mapping = lines[-1].strip()
-        out_json_bpf_enc_mapping = out_json_bpf_enc_mapping[1:]
-        out_json_bpf_enc_mapping = json.loads(out_json_bpf_enc_mapping)
-
-    # add in output dst reg and then add quantifer constraint saying that we want the output dst
-
-    input_dst_reg = bpf_register("dst_input0")
-    input_src_reg = bpf_register("src_input0")
-    output_dst_reg = bpf_register("dst_output0")
-    
-    json_off = 4 if version.parse(kernel_version) == version.parse("4.14") else 5
-    
-    # update bv mapping handles no 32-bit valus for version less than 5.73c1
-    input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
-            kernel_version)
-    input_src_reg.update_bv_mappings(in_json_bpf_enc_mapping["src_reg"][json_off:],
-    kernel_version)
-    output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["dst_reg"][json_off:],
-            kernel_version)
+    s.assert_exprs(original_s.assertions())
     
     if reg_1 == "unknown":
         s.add(input_dst_reg.fully_unknown())
@@ -65,29 +41,85 @@ def main():
         s.add(input_src_reg.fully_unknown())
     else:
         s.add(input_src_reg.singleton(int(reg_2)))
-    
-    if str(s.check()) == "sat": print("1 sat solution found")
-    else: print("0 no sat solution found")
-        
-    print("val    :", s.model()[output_dst_reg.var_off_value])
-    print("mask   :", s.model()[output_dst_reg.var_off_mask])
 
-    print("s64_min:", s.model()[output_dst_reg.smin_value])
-    print("s64_max:", s.model()[output_dst_reg.smax_value])
-
-    print("u64_min:", s.model()[output_dst_reg.umin_value])
-    print("u64_max:", s.model()[output_dst_reg.umax_value])
-
-    print("s32_min:", s.model()[output_dst_reg.s32_min_value])
-    print("s32_max:", s.model()[output_dst_reg.s32_max_value])
-
-    print("u32_min:", s.model()[output_dst_reg.u32_min_value])
-    print("u32_max:", s.model()[output_dst_reg.u32_max_value])
-    
     s.add(output_dst_reg.check_uniqueness(s))
-    
-    if str(s.check()) == "sat": print("0 not unique") 
-    else: print("1 unique") 
+
+    s.check()
+
+    print(s.model()[output_dst_reg.var_off_value],
+            s.model()[output_dst_reg.var_off_mask],
+            twos_comp(s.model()[output_dst_reg.smin_value].as_long(), 64),
+            twos_comp(s.model()[output_dst_reg.smax_value].as_long(), 64),
+            s.model()[output_dst_reg.umin_value],
+            s.model()[output_dst_reg.umax_value],
+            twos_comp(s.model()[output_dst_reg.s32_min_value].as_long(), 32),
+            twos_comp(s.model()[output_dst_reg.s32_max_value].as_long(), 32),
+            s.model()[output_dst_reg.u32_min_value],
+            s.model()[output_dst_reg.u32_max_value])
+
+
+# 3292695480587355191 0 3292695480587355191 3292695480587355191 3292695480587355191 3292695480
+
+
+def main():
+    if len(sys.argv) != 3:
+        print("usage python3 test_encoding.py <kernel_version> <input_path>")
+        return 1
+
+    kernel_version = sys.argv[1]
+    input_path = sys.argv[2]
+
+    smt_dir = f"../bpf-encodings/{kernel_version}"
+    smt_files = [
+            f for f in os.listdir(smt_dir) if os.path.isfile(os.path.join(smt_dir, f))
+            ]
+    smt_files = [os.path.join(smt_dir, f) for f in smt_files]
+
+    for smt_file in smt_files:
+        insn_name = smt_file[smt_file.find("_")+1:-5]
+        
+        if 'J' in insn_name or insn_name == 'SYNC':
+            continue
+
+        s = Optimize()
+        
+        abstract_operator = parse_smt2_file(smt_file)
+        s.add(abstract_operator)
+
+        file = open(smt_file, "r")
+        lines = file.readlines()
+        file.close()
+
+        in_json_bpf_enc_mapping = []
+        out_json_bpf_enc_mapping = []
+
+        in_json_bpf_enc_mapping = lines[-2].strip()
+        in_json_bpf_enc_mapping = in_json_bpf_enc_mapping[1:]
+        in_json_bpf_enc_mapping = json.loads(in_json_bpf_enc_mapping)
+
+        out_json_bpf_enc_mapping = lines[-1].strip()
+        out_json_bpf_enc_mapping = out_json_bpf_enc_mapping[1:]
+        out_json_bpf_enc_mapping = json.loads(out_json_bpf_enc_mapping)
+
+        input_dst_reg = bpf_register("dst_input0")
+        input_src_reg = bpf_register("src_input0")
+        output_dst_reg = bpf_register("dst_output0")
+
+        json_off = 4 if version.parse(kernel_version) == version.parse("4.14") else 5
+
+        input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
+                kernel_version)
+        input_src_reg.update_bv_mappings(in_json_bpf_enc_mapping["src_reg"][json_off:],
+        kernel_version)
+        output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["dst_reg"][json_off:],
+                kernel_version)
+        
+        optimizers[insn_name] = [s, input_dst_reg, input_src_reg, output_dst_reg]
+        
+    input_file = open(input_path, "r")
+    for input_line in input_file.readlines():
+        insn, reg_1, reg_2 = input_line.strip().split(" ")
+        get_smt_output(insn, reg_1, reg_2)
 
 if __name__ == "__main__":
     main()
