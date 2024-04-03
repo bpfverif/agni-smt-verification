@@ -8,31 +8,45 @@ verifer.
 
 ### Usage
 
-First we want to follow the instructions laid out in
-[this repository](https://github.com/bpfverif/linux-6.2-bpf-trace). This will
-give you a linux VM with an extra tracepoint that gives us the final values of
-register 1. Once you are in the VM using the linux-6.2-bpf-trace repository you
-need to install a few prerequisite softwares and packages. First install
-python 3. Then install the following packages for python packaging, prettytable,
-termcolor and z3-solver.
+First we want to clone the following two repositories: bpfverif/linux-debian-qemu
+and bpfverif/agni-test-tools. Follow the instructions in the linux-debian-qemu
+repository to get a kernel which we can modify, compile, and run. Move the kernel
+directory to the agni-test-tools directory. Then, run the following command to 
+install tracepoints on the kernel. These tracepoints will allow us to see the
+state of the kernel verifier.
+
+```
+$ python3 add_bpf_reg_trace.py <kernel directory name>
+```
+
+Now move the modified kernel code back to the linux-debian-qemu repository, 
+recompile it, and run the new image in qemu.
+
+Once you are in the VM using the linux-6.2-bpf-trace repository you need to 
+install a few prerequisite softwares and packages. First install python 3. Then 
+install the following packages for python packaging, prettytable, termcolor and 
+z3-solver.
 
 Once you have installed these softwares in the VM, run the following commands.
-
 ```
 $ git clone https://github.com/bpfverif/agni-smt-verification.git
 
-$ cd agni-smt-verification/src
-
-$ make
-
 $ ./activate_tracing.sh
 
-$ ./verifier_test <instruction> <register 1 value> <register 2 values>
+$ cd src
+
+$ python3 test_smt_encodings.py <instructions> <num tests per instruction> <kernel verison> 
 ```
 Note that activate_tracing.sh only needs to be ran once at the beginning of a session. 
 
-Right now,only ALU instructions are supported. \<instruction\> can be replaced
-with one of ADD, SUB, MUL, DIV, OR, AND, LSH, RSH, NEG, MOD, XOR, MOV, ARSH or
-END. The register value can be any unsigned 64 bit integer or "unknown". The
-output will be the values from the SMT solver and then from the verifier
-tracepoint.
+Right now,only ALU instructions are supported. \<instructions\> can be replaced
+with one or more of ADD, SUB, MUL, DIV, OR, AND, LSH, RSH, NEG, MOD, XOR, MOV, ARSH or
+END. For example, "ADD,SUB,XOR". If the number of tests per instruction is 50, we will
+generate 50 inputs for each instruction type specified in the prior argument.
+
+The output from this command will tell you if there was a difference between the output
+from the kernel verifier and the SMT verifier.
+
+All the details such as the inputs and outputs will be stored in a directory in the src
+directory. If you run test_smt_encodings.sh with the same arguments two times, the details
+from the first run will be overwritten.
