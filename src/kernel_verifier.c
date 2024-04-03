@@ -13,8 +13,8 @@
 
 #include "kernel_verifier.h"
 
-#define ITERS 15
-#define BUFSIZE 40
+#define ITERS 512 
+#define BUFSIZE 512
 #define TRACE_FILE "/sys/kernel/debug/tracing/trace"
 
 int regs[] = {

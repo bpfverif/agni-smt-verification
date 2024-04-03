@@ -8,6 +8,7 @@ def main():
 
     if argc != 4:
         print("usage: python3 test_smt_encodings.py <insns>, <num_insns>, <kern_ver>")
+        return 1
 
     insns = argv[1]
     num_insns = argv[2]
