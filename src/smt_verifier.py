@@ -16,7 +16,7 @@ arguments: kernel version, operation, reg1, reg2
 optimizers = {}
 
 def twos_comp(val, bits):
-    if (val & (1 << (bits - 1))) != 0: 
+    if (val & (1 << (bits - 1))) != 0:
         val = val - (1 << bits)
     return val
 
@@ -31,7 +31,7 @@ def get_smt_output(insn, reg_1, reg_2):
     s = Optimize()
 
     s.assert_exprs(original_s.assertions())
-    
+
     if reg_1 == "unknown":
         s.add(input_dst_reg.fully_unknown())
     else:
@@ -55,7 +55,7 @@ def get_smt_output(insn, reg_1, reg_2):
             s.model()[output_dst_reg.s32_min_value],
             s.model()[output_dst_reg.s32_max_value],
             s.model()[output_dst_reg.u32_min_value],
-            s.model()[output_dst_reg.u32_max_value])
+            s.model()[output_dst_reg.u32_max_value], end=" \n")
 
 def main():
     if len(sys.argv) != 3:
@@ -73,12 +73,12 @@ def main():
 
     for smt_file in smt_files:
         insn_name = smt_file[smt_file.find("_")+1:-5]
-        
+
         if 'J' in insn_name or insn_name == 'SYNC':
             continue
 
         s = Optimize()
-        
+
         abstract_operator = parse_smt2_file(smt_file)
         s.add(abstract_operator)
 
@@ -109,9 +109,9 @@ def main():
         kernel_version)
         output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["dst_reg"][json_off:],
                 kernel_version)
-        
+
         optimizers[insn_name] = [s, input_dst_reg, input_src_reg, output_dst_reg]
-        
+
     input_file = open(input_path, "r")
     for input_line in input_file.readlines():
         insn, reg_1, reg_2 = input_line.strip().split(" ")
