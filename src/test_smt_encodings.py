@@ -2,6 +2,30 @@ import subprocess
 import os
 import sys
 
+def print_program(insn, i):
+    op, arg1, arg2 = insn.split(" ")
+
+
+    if arg1 == "unknown":
+        print("BPF_MOV_IMM REG_1 0")
+        print("BPF_ALU64_IMM_NEG REG_1 0")
+    else:
+        print(f"BPF_LD_IMM64 REG_1 {arg1}")
+
+    if arg2 == "unknown":
+        print("BPF_MOV_IMM REG_2 0")
+        print("BPF_ALU64_IMM_NEG REG_2 0")
+    else:
+        print(f"BPF_LD_IMM64 REG_2 {arg2}")
+
+    print(f"BPF_LD_IMM64 REG_3 {(i - 1) % 512}")
+
+    print(f"BPF_ALU64_REG_{op} REG_1 REG_2") # change this
+
+    print("BPF_LD_IMM64 REG_0 1")
+
+    print("BPF_EXIT")
+
 def main():
     argv = sys.argv
     argc = len(argv)
@@ -37,10 +61,6 @@ def main():
     smt_outputs_file.close()
 
     # do comparison with diff
-
-    so = "dt1"
-    ko = "dt2"
-
     diff_result = subprocess.run(
             f"nl {so} > {so}_nl; rm {so}; nl {ko} > {ko}_nl; rm {ko}; diff {so}_nl {ko}_nl",
             stdout=subprocess.PIPE, shell=True)
@@ -61,11 +81,15 @@ def main():
     input_lines = inputs.readlines()
     inputs.close()
 
-    broken_inputs = [input_lines[i-1].strip() for i in broken_inputs]
+    broken_inputs = [(input_lines[i-1].strip(), i) for i in broken_inputs]
 
     print("Broken Instructions:")
-    print()
-    print(*broken_inputs, sep="\n")
+    for bi in broken_inputs:
+        print(f"Testing Instruction: {bi[0]}")
+        print(f"Input Line Number: {bi[1]-1}")
+        print("PROGRAM:")
+        print_program(bi[0], bi[1])
+        print()
 
 
 if __name__ == '__main__':

@@ -78,7 +78,7 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
 
     prog.insns = malloc(1);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 1; i < 4; i++) {
         abstract_register_state curr_reg = state[i];
         if (curr_reg.mask == FULLY_UNKNOWN)
         {
@@ -384,7 +384,6 @@ int main(int argc, char **argv)
             assign_reg(&reg_2, insn_strs[i][2]);
 
             abstract_register_state state[] = {
-                {.mask = SINGLETON, .value = 0},
                 reg_1,
                 reg_2,
                 {.mask = SINGLETON, .value = i}           
