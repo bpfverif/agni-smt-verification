@@ -101,7 +101,8 @@ def main():
         input_src_reg = bpf_register("src_input0")
         output_dst_reg = bpf_register("dst_output0")
 
-        json_off = 4 if version.parse(kernel_version) == version.parse("4.14") else 5
+        kern_ver = version.parse(kernel_version)
+        json_off = 4 if kern_ver <= version.parse("4.14") else 3 if kern_ver >= version.parse("6.3") else 5
 
         input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
                 kernel_version)
