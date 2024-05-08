@@ -83,6 +83,7 @@ def main():
 
     broken_inputs = [(input_lines[i-1].strip(), i) for i in broken_inputs]
 
+    # print program of broken inputs
     print("Broken Instructions:")
     for bi in broken_inputs:
         print(f"Testing Instruction: {bi[0]}")
