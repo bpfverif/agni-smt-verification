@@ -30,6 +30,9 @@ int regs[] = {
     BPF_REG_9,
 };
 
+// single instruction type for now TODO support inputs with multiple instruction types
+char *insn_type = NULL; 
+
 char *read_line(int fd)
 {
     char read_buffer[BUFSIZE];
@@ -79,7 +82,7 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
     prog.insns = malloc(1);
 
     for (int i = 1; i < 4; i++) {
-        abstract_register_state curr_reg = state[i];
+        abstract_register_state curr_reg = state[i-1];
         if (curr_reg.mask == FULLY_UNKNOWN)
         {
             num_insns += 2;
@@ -97,9 +100,30 @@ bpf_prog gen_prog(abstract_register_state *state, struct bpf_insn test_insn)
         }
     }
 
-    num_insns += 3;
+    num_insns += 2;
+    prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);   
+    struct bpf_insn flag[2] = {BPF_LD_IMM64(regs[5], 1)};
+    prog.insns[num_insns-2] = flag[0];
+    prog.insns[num_insns-1] = flag[1];
+
+    num_insns += 1;
     prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
-    prog.insns[num_insns-3] = test_insn;
+    prog.insns[num_insns-1] = test_insn;
+    
+    if ((test_insn.code & 7) == BPF_JMP) {
+        num_insns += 4;
+        prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
+        struct bpf_insn true_branch[2] = {BPF_LD_IMM64(regs[4], 1)};
+        prog.insns[num_insns-4] = true_branch[0];
+        prog.insns[num_insns-3] = true_branch[1];
+
+        struct bpf_insn false_branch[2] = {BPF_LD_IMM64(regs[4], 2)};
+        prog.insns[num_insns-2] = false_branch[0];
+        prog.insns[num_insns-1] = false_branch[1];
+    }
+
+    num_insns += 2;
+    prog.insns = realloc(prog.insns, bpf_insn_size * num_insns);
     prog.insns[num_insns-2] = BPF_MOV64_IMM(BPF_REG_0, 0);
     prog.insns[num_insns-1] = BPF_EXIT_INSN();
 
@@ -180,7 +204,11 @@ void assign_test_insn(struct bpf_insn *insn, char *operation)
     else if (strcmp(operation, "END") == 0)
     {
         *insn = BPF_ALU64_REG(0xd0, BPF_REG_1, BPF_REG_2);
-    }
+    } 
+    else if (strcmp(operation, "JEQ") == 0) { 
+        // TODO add in rest of jump instruction codes
+        *insn = BPF_JMP_REG(0x10, BPF_REG_1, BPF_REG_2, 2);
+    } 
     else
     {
         memset(insn, 0, sizeof(struct bpf_insn));
@@ -234,8 +262,7 @@ char ***get_insns(int input_fd)
         char **insn_list_entry = NULL;
         int entry_len = 0;
 
-        while (insn_fragment != NULL)
-        {
+        while (insn_fragment != NULL) {
             int insn_fragment_len = strlen(insn_fragment) + 1;
             entry_len++;
             insn_list_entry = realloc(insn_list_entry, entry_len * sizeof(char *));
@@ -256,6 +283,8 @@ char ***get_insns(int input_fd)
     final_insn_list[num_insns] = 0; // null termiante
 
     // TODO do deallocations
+    
+    insn_type = final_insn_list[0][0];
 
     return final_insn_list; 
 }
@@ -313,6 +342,9 @@ void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
 
             reg_state_frag = strtok_r(NULL, " ", &save_ptr);
         }
+        
+        reg_state_frags = realloc(reg_state_frags, (reg_state_len+1) * sizeof(char *));
+        reg_state_frags[reg_state_len] = NULL;
 
         reg_states = realloc(reg_states, sizeof(char **) * (i+1));
         reg_states[i] = reg_state_frags;
@@ -324,11 +356,24 @@ void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
 
     for (int i = 0; i < num_outputs; i++)
     {
+        int start = 10;
+        int end = 20;
+        if (strcmp(insn_type, "JEQ") == 0)
+            end += 10;
+
         char **output_frags = reg_states[order[i]];
-        for (int j = 10; j < 20; j++)
+        for (int j = start; j < end; j++)
         {
             printf("%s ", output_frags[j]);
         }
+        
+        if (output_frags[100] != NULL) {
+            for (int j = 100 + start; j < 100 + end; j++)
+            {
+                printf("%s ", output_frags[j]);
+            }
+        }
+        
         printf("\n");
     }
 }
@@ -386,7 +431,7 @@ int main(int argc, char **argv)
             abstract_register_state state[] = {
                 reg_1,
                 reg_2,
-                {.mask = SINGLETON, .value = i}           
+                {.mask = SINGLETON, .value = i}
             };
 
             struct bpf_insn test_insn;
@@ -413,7 +458,7 @@ int main(int argc, char **argv)
         
         print_outputs(trace_fd, iters, k);
         close(trace_fd); 
-        fclose(fopen(TRACE_FILE, "w"));
+        // fclose(fopen(TRACE_FILE, "w"));
 
         k += iters;      
     }
