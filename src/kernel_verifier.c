@@ -372,6 +372,11 @@ void print_outputs(int trace_fd, int num_outputs, int min_prog_id)
             {
                 printf("%s ", output_frags[j]);
             }
+        } else if (strcmp(insn_type, "JEQ") == 0) {
+            for (int j = start; j < end; j++)
+            {
+                printf("%s ", output_frags[j]);
+            }           
         }
         
         printf("\n");
@@ -458,7 +463,7 @@ int main(int argc, char **argv)
         
         print_outputs(trace_fd, iters, k);
         close(trace_fd); 
-        // fclose(fopen(TRACE_FILE, "w"));
+        fclose(fopen(TRACE_FILE, "w"));
 
         k += iters;      
     }

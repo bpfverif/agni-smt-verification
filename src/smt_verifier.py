@@ -15,14 +15,10 @@ arguments: kernel version, operation, reg1, reg2
 
 optimizers = {}
 
-def twos_comp(val, bits):
-    if (val & (1 << (bits - 1))) != 0:
-        val = val - (1 << bits)
-    return val
-
-
 def get_smt_output(insn, reg_1, reg_2):
-    original_s, input_dst_reg, input_src_reg, output_dst_reg = optimizers.get(insn, None)
+    original_s, input_dst_reg, input_src_reg, output_dst_reg = optimizers.get(insn, None)[:4]
+    if insn == "JEQ":
+        _, _, _, _, output_src_reg, other_output_dst_reg, other_output_src_reg = optimizers.get(insn, None)
 
     if original_s == None:
         print("insn not recognized")
@@ -46,16 +42,58 @@ def get_smt_output(insn, reg_1, reg_2):
 
     s.check()
 
-    print(s.model()[output_dst_reg.var_off_value],
-            s.model()[output_dst_reg.var_off_mask],
-            s.model()[output_dst_reg.smin_value],
-            s.model()[output_dst_reg.smax_value],
-            s.model()[output_dst_reg.umin_value],
-            s.model()[output_dst_reg.umax_value],
-            s.model()[output_dst_reg.s32_min_value],
-            s.model()[output_dst_reg.s32_max_value],
-            s.model()[output_dst_reg.u32_min_value],
-            s.model()[output_dst_reg.u32_max_value], end=" \n")
+    if insn == "JEQ":
+        print(s.model()[output_dst_reg.var_off_value],
+                s.model()[output_dst_reg.var_off_mask],
+                s.model()[output_dst_reg.smin_value],
+                s.model()[output_dst_reg.smax_value],
+                s.model()[output_dst_reg.umin_value],
+                s.model()[output_dst_reg.umax_value],
+                s.model()[output_dst_reg.s32_min_value],
+                s.model()[output_dst_reg.s32_max_value],
+                s.model()[output_dst_reg.u32_min_value],
+                s.model()[output_dst_reg.u32_max_value], end=" ")
+        print(s.model()[output_src_reg.var_off_value],
+                s.model()[output_src_reg.var_off_mask],
+                s.model()[output_src_reg.smin_value],
+                s.model()[output_src_reg.smax_value],
+                s.model()[output_src_reg.umin_value],
+                s.model()[output_src_reg.umax_value],
+                s.model()[output_src_reg.s32_min_value],
+                s.model()[output_src_reg.s32_max_value],
+                s.model()[output_src_reg.u32_min_value],
+                s.model()[output_src_reg.u32_max_value], end=" ")
+        print(s.model()[other_output_dst_reg.var_off_value],
+                s.model()[other_output_dst_reg.var_off_mask],
+                s.model()[other_output_dst_reg.smin_value],
+                s.model()[other_output_dst_reg.smax_value],
+                s.model()[other_output_dst_reg.umin_value],
+                s.model()[other_output_dst_reg.umax_value],
+                s.model()[other_output_dst_reg.s32_min_value],
+                s.model()[other_output_dst_reg.s32_max_value],
+                s.model()[other_output_dst_reg.u32_min_value],
+                s.model()[other_output_dst_reg.u32_max_value], end=" ")
+        print(s.model()[other_output_src_reg.var_off_value],
+                s.model()[other_output_src_reg.var_off_mask],
+                s.model()[other_output_src_reg.smin_value],
+                s.model()[other_output_src_reg.smax_value],
+                s.model()[other_output_src_reg.umin_value],
+                s.model()[other_output_src_reg.umax_value],
+                s.model()[other_output_src_reg.s32_min_value],
+                s.model()[other_output_src_reg.s32_max_value],
+                s.model()[other_output_src_reg.u32_min_value],
+                s.model()[other_output_src_reg.u32_max_value], end=" \n")
+    else:
+        print(s.model()[output_dst_reg.var_off_value],
+                s.model()[output_dst_reg.var_off_mask],
+                s.model()[output_dst_reg.smin_value],
+                s.model()[output_dst_reg.smax_value],
+                s.model()[output_dst_reg.umin_value],
+                s.model()[output_dst_reg.umax_value],
+                s.model()[output_dst_reg.s32_min_value],
+                s.model()[output_dst_reg.s32_max_value],
+                s.model()[output_dst_reg.u32_min_value],
+                s.model()[output_dst_reg.u32_max_value], end=" \n")
 
 def main():
     if len(sys.argv) != 3:
@@ -74,7 +112,7 @@ def main():
     for smt_file in smt_files:
         insn_name = smt_file[smt_file.find("_")+1:-5]
 
-        if 'J' in insn_name or insn_name == 'SYNC':
+        if ('J' in insn_name or insn_name == 'SYNC') and insn_name != "JEQ":
             continue
 
         s = Optimize()
@@ -97,21 +135,46 @@ def main():
         out_json_bpf_enc_mapping = out_json_bpf_enc_mapping[1:]
         out_json_bpf_enc_mapping = json.loads(out_json_bpf_enc_mapping)
 
-        input_dst_reg = bpf_register("dst_input0")
-        input_src_reg = bpf_register("src_input0")
-        output_dst_reg = bpf_register("dst_output0")
-
         kern_ver = version.parse(kernel_version)
         json_off = 4 if kern_ver <= version.parse("4.14") else 3 if kern_ver >= version.parse("6.3") else 5
 
-        input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
-                kernel_version)
-        input_src_reg.update_bv_mappings(in_json_bpf_enc_mapping["src_reg"][json_off:],
-        kernel_version)
-        output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["dst_reg"][json_off:],
-                kernel_version)
+        if insn_name == "JEQ":
+            input_dst_reg = bpf_register("dst_input0")
+            input_src_reg = bpf_register("src_input0")
+            output_dst_reg = bpf_register("dst_output0")
+            output_src_reg = bpf_register("src_output0")
+            other_output_dst_reg = bpf_register("dst_output1")
+            other_output_src_reg = bpf_register("src_output1")
 
-        optimizers[insn_name] = [s, input_dst_reg, input_src_reg, output_dst_reg]
+            input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
+                    kernel_version)
+            input_src_reg.update_bv_mappings(in_json_bpf_enc_mapping["src_reg"][json_off:],
+                    kernel_version)
+            output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["dst_reg"][json_off:],
+                    kernel_version)
+            output_src_reg.update_bv_mappings(out_json_bpf_enc_mapping["src_reg"][json_off:],
+                    kernel_version)
+            other_output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["other_branch_dst_reg"][json_off:],
+                    kernel_version)
+            other_output_src_reg.update_bv_mappings(out_json_bpf_enc_mapping["other_branch_src_reg"][json_off:],
+                    kernel_version)
+
+
+            optimizers[insn_name] = [s, input_dst_reg, input_src_reg, output_dst_reg, output_src_reg, other_output_dst_reg, other_output_src_reg]
+
+        else:
+            input_dst_reg = bpf_register("dst_input0")
+            input_src_reg = bpf_register("src_input0")
+            output_dst_reg = bpf_register("dst_output0")
+
+            input_dst_reg.update_bv_mappings(in_json_bpf_enc_mapping["dst_reg"][json_off:],
+                    kernel_version)
+            input_src_reg.update_bv_mappings(in_json_bpf_enc_mapping["src_reg"][json_off:],
+            kernel_version)
+            output_dst_reg.update_bv_mappings(out_json_bpf_enc_mapping["dst_reg"][json_off:],
+                    kernel_version)
+
+            optimizers[insn_name] = [s, input_dst_reg, input_src_reg, output_dst_reg]
 
     input_file = open(input_path, "r")
     for input_line in input_file.readlines():
